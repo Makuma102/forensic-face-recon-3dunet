@@ -31,21 +31,24 @@ class MeanFace:
         return self.mean
 
 
-def skull_envelope(skull_sdf: np.ndarray, spacing: float, close_mm: float = 6.0) -> np.ndarray:
+def skull_envelope(skull_sdf: np.ndarray, spacing: float, close_mm: float = 10.0) -> np.ndarray:
     """Solid region bounded by the outer bone surface (cranial and facial cavities filled)."""
     bone = skull_sdf < 0
     r = max(1, int(round(close_mm / spacing)))
     env = ndimage.binary_closing(np.pad(bone, r), structure=_ball(r))[r:-r, r:-r, r:-r]
     env = ndimage.binary_fill_holes(env)
-    for z in range(env.shape[0]):
-        env[z] = ndimage.binary_fill_holes(env[z])
+    for ax in range(3):
+        ev = np.moveaxis(env, ax, 0)
+        for i in range(ev.shape[0]):
+            ev[i] = ndimage.binary_fill_holes(ev[i])
     return env
 
 
 class ConstantTissueDepth:
     """Classical tissue-depth idea in its simplest form: offset the skull envelope by one global depth.
 
-    The depth is chosen on the training set to minimise mean |SDF error| near the true skin.
+    The depth is chosen on the training set to minimise the mean |SDF error| near the true
+    facial skin (front of the head, chin and above).
     """
     name = "tissue_depth"
 
@@ -59,6 +62,12 @@ class ConstantTissueDepth:
                 s, t, v = z["skull_sdf"].astype(np.float32), z["skin_sdf"].astype(np.float32), z["valid"]
             env = signed_distance(skull_envelope(s, spacing), spacing)
             near = (np.abs(t) < 4) & v
+            # Fit on the face only: front of the head, from the chin up (skull-derived limits).
+            near[:, int((40 + 80) / spacing):] = False
+            front = s[:, : int((40 + 35) / spacing)] < 0
+            zz = np.flatnonzero(front.any((1, 2)))
+            if len(zz):
+                near[: zz.min()] = False
             for i, d in enumerate(self.depths):
                 errs[i] += np.abs(env[near] - d - t[near]).mean()
         self.depth = float(self.depths[np.argmin(errs)])

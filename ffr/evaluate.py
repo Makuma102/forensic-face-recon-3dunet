@@ -45,12 +45,23 @@ def sliding_window(model, inp: torch.Tensor, patch, overlap: float = 0.5) -> tor
     return (out / acc)[None, None]
 
 
-def roi_from_meta(meta: dict, fine_shape, sp: float, depth_mm: float) -> dict:
-    """Anterior face region in crop mm: front of crop + margin + depth_mm, between chin level and brow."""
+def menton_mm(skull_fine: np.ndarray, sp: float, front_mm: float = 40.0, depth_mm: float = 35.0) -> float | None:
+    """Height (crop mm) of the lowest point of the chin: lowest bone in the front 35 mm of the skull.
+
+    Derived from the skull (the model input), so using it for the ROI leaks nothing.
+    """
+    y1 = int((front_mm + depth_mm) / sp)
+    zz = np.flatnonzero(skull_fine[:, :y1].any((1, 2)))
+    return float(zz.min() * sp) if len(zz) else None
+
+
+def roi_from_meta(meta: dict, fine_shape, sp: float, depth_mm: float, chin_mm: float | None = None) -> dict:
+    """Anterior face region in crop mm: front 'depth_mm' behind the anterior-most bone, chin to brow."""
     size = np.array(fine_shape) * sp
     front = 40.0  # PrepConfig.front_margin_mm: the anterior-most bone sits 40 mm behind the crop front
     vertex = size[0] - 4.0 - sp  # vertex sits ~4 mm below the crop top (see make_sample)
-    return dict(y_max_mm=front + depth_mm, z_min_mm=max(0.0, vertex - 235.0), z_max_mm=vertex - 60.0,
+    z_min = chin_mm - 5.0 if chin_mm is not None else max(0.0, vertex - 235.0)
+    return dict(y_max_mm=front + depth_mm, z_min_mm=max(0.0, z_min), z_max_mm=vertex - 60.0,
                 border_mm=3.0, size_mm=tuple(size))
 
 
@@ -108,12 +119,13 @@ def main():
             skull = z["skull_sdf"].astype(np.float32)
             gt_fine = z["skin_sdf_fine"].astype(np.float32)
             valid = z["valid"]
+            chin = menton_mm(z["skull_mask_fine"], meta["work_spacing"])
         sp_out, sp_fine = meta["out_spacing"], meta["work_spacing"]
         pred = predict(skull, sp_out)
         pred_fine = upsample_to(pred, gt_fine.shape)
         valid_fine = upsample_to(valid.astype(np.float32), gt_fine.shape) > 0.5
         pm, gm = sdf_to_mesh(pred_fine, sp_fine), sdf_to_mesh(gt_fine, sp_fine)
-        roi = roi_from_meta(meta, gt_fine.shape, sp_fine, a.roi_depth_mm)
+        roi = roi_from_meta(meta, gt_fine.shape, sp_fine, a.roi_depth_mm, chin)
         if pm is None:
             rows.append(dict(case=meta["case"], failed=True))
             continue

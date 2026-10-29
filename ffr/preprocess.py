@@ -57,9 +57,13 @@ def segment_body(hu: np.ndarray, cfg: PrepConfig, spacing: float) -> np.ndarray:
     m = _largest_cc(m)
     m = ndimage.binary_closing(m, structure=_ball(r))
     m = ndimage.binary_fill_holes(m)
-    # Slice-wise fill closes the oral and nasal cavities that are open on one end only.
-    for z in range(m.shape[0]):
-        m[z] = ndimage.binary_fill_holes(m[z])
+    # Slice-wise fills along all three axes close the oral and nasal cavities,
+    # which are open to the outside through the nostrils or lips in 3D.
+    for _ in range(2):
+        for ax in range(3):
+            mv = np.moveaxis(m, ax, 0)
+            for i in range(mv.shape[0]):
+                mv[i] = ndimage.binary_fill_holes(mv[i])
     return m
 
 
@@ -89,12 +93,17 @@ def find_cranium(hu: np.ndarray, bone: np.ndarray, spacing: float) -> dict | Non
     neck/thorax scans that contain no head at all.
     """
     rows = []
+    rr = max(1, int(round(4 / spacing)))
+    yy, xx = np.ogrid[-rr:rr + 1, -rr:rr + 1]
+    disk = (yy * yy + xx * xx) <= rr * rr
     for z in range(bone.shape[0]):
         b = bone[z]
         if b.sum() * spacing ** 2 < 300:  # < 3 cm^2 of bone
             continue
-        filled = ndimage.binary_fill_holes(b)
-        inner = filled & ~b
+        # Thin temporal bone often leaves gaps in the ring at a 250 HU threshold.
+        bc = ndimage.binary_closing(np.pad(b, rr), structure=disk)[rr:-rr, rr:-rr]
+        filled = ndimage.binary_fill_holes(bc)
+        inner = filled & ~bc
         lab, n = ndimage.label(inner)
         if n == 0:
             continue
@@ -115,7 +124,7 @@ def find_cranium(hu: np.ndarray, bone: np.ndarray, spacing: float) -> dict | Non
     breaks = np.flatnonzero(np.diff(zs) > max(2, int(5 / spacing)))
     runs = np.split(np.arange(len(zs)), breaks + 1)
     run = max(runs, key=len)
-    if (zs[run[-1]] - zs[run[0]]) * spacing < 50:
+    if (zs[run[-1]] - zs[run[0]]) * spacing < 35:
         return None
     sel = [rows[i] for i in run]
     w = np.array([r[1] for r in sel])
@@ -161,7 +170,7 @@ def coverage_qc(hu: np.ndarray, body: np.ndarray, bone: np.ndarray, infov: np.nd
         q.ok = False
         q.reasons.append("bone far above the cranial vault (raised arms?)")
     # Body tissue lateral to the head (raised arms, hands, positioning aids) corrupts the skin target.
-    zlo = max(0, a["vertex_z"] - int(200 / spacing))
+    zlo = max(0, a["vertex_z"] - int(160 / spacing))  # above the shoulders
     zz, yy, xx = np.nonzero(body[zlo:a["vertex_z"] + 1])
     far = ((yy - cran["cy"]) ** 2 + (xx - cran["cx"]) ** 2) * spacing ** 2 > 130.0 ** 2
     q.values["lateral_body_ml"] = float(far.sum() * spacing ** 3 / 1000)
