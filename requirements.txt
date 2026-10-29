@@ -13,3 +13,4 @@ pyyaml>=6.0
 pillow>=10.0
 idc-index>=0.8
 pytest>=8.0
+tabulate
