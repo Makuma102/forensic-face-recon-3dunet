@@ -1,0 +1,31 @@
+# CPU pilot: same model, trained on 64^3 patches near the skin, fewer epochs.
+seed: 0
+data:
+  dirs: [data/cq500, data/idc]       # folders of preprocessed .npz samples
+  splits: data/splits.json
+  fold: 0
+  trunc_mm: 20.0
+  coords: true                       # CoordConv channels (ablation: false)
+  augment: true                      # mirror + small shifts (ablation: false)
+  patch: [64, 64, 64]
+model:
+  base: 16
+  depth: 4
+  norm: instance
+  residual: true
+  skip_connections: true             # ablation: false (plain encoder-decoder)
+  predict_residual: false            # ablation: true (skull SDF + learned offset)
+  dropout: 0.1
+loss:
+  surface_weight: 4.0                # ablation: 0 (plain L1)
+  sigma: 0.15
+  sign_weight: 0.0
+train:
+  epochs: 60
+  patches_per_subject: 2
+  batch_size: 1
+  lr: 0.001
+  weight_decay: 0.0001
+  val_every: 10
+  num_workers: 2
+  out_dir: runs/unet_pilot_cpu

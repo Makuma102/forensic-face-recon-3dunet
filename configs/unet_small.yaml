@@ -1,0 +1,30 @@
+# Small 3D U-Net, skull SDF -> skin SDF on a 2 mm grid (128 x 112 x 96 voxels).
+seed: 0
+data:
+  dirs: [data/cq500, data/idc]       # folders of preprocessed .npz samples
+  splits: data/splits.json
+  fold: 0
+  trunc_mm: 20.0
+  coords: true                       # CoordConv channels (ablation: false)
+  augment: true                      # mirror + small shifts (ablation: false)
+  patch: null                        # full volume; set e.g. [64, 64, 64] for patch training
+model:
+  base: 16
+  depth: 4
+  norm: instance
+  residual: true
+  skip_connections: true             # ablation: false (plain encoder-decoder)
+  predict_residual: false            # ablation: true (skull SDF + learned offset)
+  dropout: 0.1
+loss:
+  surface_weight: 4.0                # ablation: 0 (plain L1)
+  sigma: 0.15
+  sign_weight: 0.0
+train:
+  epochs: 150
+  batch_size: 1
+  lr: 0.001
+  weight_decay: 0.0001
+  val_every: 5
+  num_workers: 2
+  out_dir: runs/unet_small

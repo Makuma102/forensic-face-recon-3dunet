@@ -1,0 +1,15 @@
+torch>=2.2
+numpy>=1.26
+scipy>=1.11
+scikit-image>=0.22
+trimesh>=4.0
+rtree>=1.2
+pydicom>=2.4
+pylibjpeg>=2.0
+pylibjpeg-libjpeg>=2.1
+SimpleITK>=2.3
+pandas>=2.0
+pyyaml>=6.0
+pillow>=10.0
+idc-index>=0.8
+pytest>=8.0

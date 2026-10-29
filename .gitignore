@@ -1,0 +1,16 @@
+# Medical images and anything derived from them stay local (data use agreements).
+data/
+runs/
+results/
+*.npz
+*.nii
+*.nii.gz
+*.dcm
+*.ply
+*.stl
+*.obj
+qc*.png
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
